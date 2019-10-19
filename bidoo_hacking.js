@@ -109,7 +109,7 @@ function updateInputs() {
     var currentPriceText = currentPriceElement.text().trim();
     currentPrice = currency2Number(currentPriceText);
     linkElementText = linkElementForText.text();
-    console.log(currentTimeText, currentWinnerName, currentPrice, priceThreshold);
+    console.log(currentTimeText, currentWinnerName, currentPrice, priceThreshold, new Date());
 }
 
 function calculateState() {
