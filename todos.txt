@@ -1,0 +1,6 @@
+quando si finisce per troppo spreco, non mi ha stampato il tempo impiegato, ma NaN
+
+aggiungere prezzo iniziale?
+
+aggiungere abbandono se partecipa un fissato?
+
