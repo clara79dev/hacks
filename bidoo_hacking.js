@@ -1,14 +1,18 @@
 LOOPING = 0;
-UNKNOWN = 1;
+CONTROLLING = 1;
 CANDIDATE_FOR_WINNING = 2;
-AUCTION_FINISHED = 3;
+SUCCESSFUL_AUCTION_FINISHED = 3;
 COMING_SOON = 4;
+ABANDONED_FOR_BID_EXCEEDING = 5;
+ABANDONED_FOR_PRICE_EXCEEDING = 6;
+FAILED_AUCTION_FINISHED = 7;
+UNMANAGED = 8;
 
-function bidSetupAndStart(userName, auctionId, maxPurchasePricePercentage=50, decimalSign=",") {
+function bidSetupAndStart(userName, auctionId, maxPurchasePricePercentage=50, bidThreshold=0, decimalSign=",") {
 	if(typeof attemptTask !== 'undefined')
         clearTimeout(attemptTask);
 
-    bidSetup(decimalSign, auctionId, maxPurchasePricePercentage, userName);
+    bidSetup(decimalSign, auctionId, maxPurchasePricePercentage, userName, bidThreshold);
 
     var currentTimeText = timeElement.text();
     var waitingDelay = calculateDelay(currentTimeText);
@@ -16,9 +20,9 @@ function bidSetupAndStart(userName, auctionId, maxPurchasePricePercentage=50, de
     attemptTask = setTimeout(bid, waitingDelay);
 }
 
-function bidSetup(decimalSign, auctionId, maxPurchasePricePercentage, userName) {
+function bidSetup(decimalSign, auctionId, maxPurchasePricePercentage, userName, bidThreshold) {
     startDate = new Date();
-    clickCounter = 0;
+    bidCounter = 0;
     currentRegExp = decimalSign === "," ? /[^0-9\,-]+/g : /[^0-9\.-]+/g;
     auctionElement = $("#divAsta" + auctionId);
     timeElement = $("#TempoMancante" + auctionId);
@@ -35,6 +39,7 @@ function bidSetup(decimalSign, auctionId, maxPurchasePricePercentage, userName) 
     currentTimeText = null;
     currentWinnerName = null;
     currentPrice = Number.MAX_VALUE;
+    bidCounterThreshold = bidThreshold;
     bidHackData = {
         who: loggedUserName,
         what: auctionId,
@@ -46,49 +51,56 @@ function bidSetup(decimalSign, auctionId, maxPurchasePricePercentage, userName) 
 var bid = function () {
     updateInputs();
 
-    var curentState = calculateState();
+    var currentState = calculateState();
 
-    switch (curentState) {
+    switch (currentState) {
         case CANDIDATE_FOR_WINNING:
             tryToClick();
             break;
-        case AUCTION_FINISHED:
-            onFinish();
+        case SUCCESSFUL_AUCTION_FINISHED:
+        case FAILED_AUCTION_FINISHED:
+        case ABANDONED_FOR_BID_EXCEEDING:
+        case ABANDONED_FOR_PRICE_EXCEEDING:
+            onFinish(currentState);
             break;
-        case COMING_SOON:
         default:
             goToSleep();
     }
-
-    // if(currentTimeText === "00:00"
-    //     && currentWinnerName != loggedUserName
-    //     && currentPrice <= priceThreshold) {
-    //         tryToClick();
-    // } else if(linkElementText === "VENDUTO"
-    //     || currentTimeText === "Controllo..."
-    //     || currentTimeText === "Ha Vinto!"
-    //     || currentTimeText === "Hai Vinto!"
-    //     || currentPrice > priceThreshold) {
-    //     onFinish();
-    // } else {
-    //     goToSleep();
-    // }
 };
 
-function onFinish() {
+function onFinish(finalState) {
     stopDate = new Date();
+    console.log("DATA FINE: ", stopDate);
+    var resultDescription = getResultDescription(finalState);
+    console.log(resultDescription);
     console.log("Time consumed: " + stopDate - startDate);
-    console.log("Bid consumed: " + clickCounter);
+    console.log("Bid consumed: " + bidCounter);
+}
+
+function getResultDescription(state) {
+    if (state === SUCCESSFUL_AUCTION_FINISHED) {
+        return "VITTORIA";
+    }
+    if (state === FAILED_AUCTION_FINISHED) {
+        return "SCONFITTA";
+    }
+    if (state === ABANDONED_FOR_BID_EXCEEDING) {
+        return "TROPPO SPRECO";
+    }
+    if (state === ABANDONED_FOR_PRICE_EXCEEDING) {
+        return "TROPPO COSTOSO";
+    }
+    
+    return "BOOH!"
 }
 
 function tryToClick() {
     if (justChecked) {
         // linkElement.click();
         console.log("CLICK");
-        ++clickCounter;
+        ++bidCounter;
         attemptTask = setTimeout(bid, 2000);
-    }
-    else {
+    } else {
         justChecked = true;
         attemptTask = setTimeout(bid, 1000);
     }
@@ -113,19 +125,30 @@ function updateInputs() {
 }
 
 function calculateState() {
+
+    if(bidCounterThreshold > 0 && bidCounter > bidCounterThreshold)
+        return ABANDONED_FOR_BID_EXCEEDING;
+
+    if(currentPrice > priceThreshold)
+        return ABANDONED_FOR_PRICE_EXCEEDING;
+
     if(currentTimeText === "00:00"
         && currentWinnerName != loggedUserName
         && currentPrice <= priceThreshold)
         return CANDIDATE_FOR_WINNING;
 
-    if(linkElementText === "VENDUTO"
-    || currentTimeText === "Ha Vinto!"
-    || currentTimeText === "Hai Vinto!"
-    || currentPrice > priceThreshold)
-        return AUCTION_FINISHED;
+    if(linkElementText === "VENDUTO") {
+        if (currentTimeText === "Ha Vinto!") {
+            return FAILED_AUCTION_FINISHED;
+        } else if (currentTimeText === "Hai Vinto!") {
+            return SUCCESSFUL_AUCTION_FINISHED;
+        } else {
+            return UNMANAGED;
+        }
+    }
 
     if(currentTimeText === "Controllo...")
-        return UNKNOWN;
+        return CONTROLLING;
 
     if(linkElementText === "RIAPRE PRESTO")
         return COMING_SOON;
